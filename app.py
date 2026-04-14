@@ -1,41 +1,44 @@
 import streamlit as st
 from PIL import Image
 import torch
-from transformers import AutoModelForImageClassification, AutoFeatureExtractor
+from transformers import AutoImageProcessor, AutoModelForImageClassification
 
 # ----------------------------
-# 🌿 App Setup
+# 🌿 Setup
 # ----------------------------
-st.set_page_config(page_title="🌿 Pflanzen KI", page_icon="🌱")
-st.title("🌿 KI Pflanzen- & Bodenanalyse")
+st.set_page_config(page_title="🌿 Wildpflanzen KI", page_icon="🌱")
+st.title("🌿 Wildpflanzen & Bodenanalyse (Offline KI)")
+
+st.write("Lade ein Bild einer Pflanze hoch.")
 
 # ----------------------------
-# 🤖 Modell
+# 🤖 Modell laden
 # ----------------------------
 @st.cache_resource
 def load_model():
-    model_name = "maxefrost/plant_image_classifier_random"
+    model_name = "marwaALzaabi/plant-identification-vit"
 
-    feature_extractor = AutoFeatureExtractor.from_pretrained(model_name)
+    processor = AutoImageProcessor.from_pretrained(model_name)
     model = AutoModelForImageClassification.from_pretrained(model_name)
 
-    return feature_extractor, model
+    return processor, model
 
-feature_extractor, model = load_model()
+processor, model = load_model()
 
 # ----------------------------
-# 🌱 Logik
+# 🌱 Pflanzen → Boden
 # ----------------------------
 plant_to_soil = {
-    "nettle": "stickstoffreich, feucht",
     "dandelion": "nährstoffreich",
+    "nettle": "stickstoffreich, feucht",
     "clover": "stickstoffarm",
-    "daisy": "nährstoffarm bis mittel"
+    "daisy": "nährstoffarm bis mittel",
+    "plant": "unbekannt"
 }
 
 soil_to_plants = {
-    "stickstoffreich, feucht": ["Kohl", "Gurke"],
     "nährstoffreich": ["Tomate", "Zucchini"],
+    "stickstoffreich, feucht": ["Kohl", "Gurke"],
     "stickstoffarm": ["Erbsen", "Lavendel"],
     "nährstoffarm bis mittel": ["Rosmarin", "Lavendel"]
 }
@@ -50,12 +53,12 @@ if uploaded_file:
     image = Image.open(uploaded_file)
     st.image(image, use_column_width=True)
 
-    st.write("🔍 Analysiere...")
+    st.write("🔍 Analysiere Pflanze...")
 
     # ----------------------------
     # 🤖 Prediction
     # ----------------------------
-    inputs = feature_extractor(images=image, return_tensors="pt")
+    inputs = processor(images=image, return_tensors="pt")
 
     with torch.no_grad():
         outputs = model(**inputs)
@@ -79,12 +82,22 @@ if uploaded_file:
     # ----------------------------
     soil = plant_to_soil.get(top_plant, "unbekannt / gemischt")
 
-    st.success(f"Boden: {soil}")
+    st.subheader("🌱 Bodenanalyse")
+    st.success(soil)
 
     # ----------------------------
     # 🌿 Empfehlungen
     # ----------------------------
-    st.subheader("🌿 Empfehlungen:")
+    st.subheader("🌿 Empfehlungen")
 
     for p in soil_to_plants.get(soil, []):
         st.write("🌿", p)
+
+    # ----------------------------
+    # 💡 Erklärung
+    # ----------------------------
+    st.subheader("💡 Erklärung")
+    st.write(
+        "Das Modell erkennt die wahrscheinlichste Pflanze im Bild. "
+        "Diese wird mit einer eigenen Boden-Datenbank verknüpft."
+    )
