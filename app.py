@@ -3,37 +3,40 @@ from PIL import Image
 from transformers import pipeline
 
 # ----------------------------
-# 🌱 Seite Setup
+# 🌿 App Setup
 # ----------------------------
-st.set_page_config(page_title="Pflanzen KI", page_icon="🌿")
-st.title("🌿 KI Pflanzen- & Bodenanalyse App")
-st.write("Lade ein Bild einer Wildpflanze hoch und erhalte Bodeninfos + Empfehlungen.")
+st.set_page_config(page_title="🌿 Pflanzen KI", page_icon="🌱")
+st.title("🌿 KI Pflanzen- & Bodenanalyse")
+st.write("Lade ein Bild einer Pflanze hoch und erhalte Boden + Empfehlungen.")
 
 # ----------------------------
-# 🧠 Modell (leicht & stabil)
+# 🤖 Modell laden (Pflanzen-spezialisiert)
 # ----------------------------
 @st.cache_resource
 def load_model():
-    # robustes allgemeines Vision Modell (funktioniert sicher)
-    return pipeline("image-classification", model="google/vit-base-patch16-224")
+    return pipeline(
+        "image-classification",
+        model="marwaALzaabi/plant-identification-vit"
+    )
 
 classifier = load_model()
 
 # ----------------------------
-# 🌱 Deine Wissensbasis (LOGIK)
+# 🌱 Wissensdatenbank (deine Logik)
 # ----------------------------
 plant_to_soil = {
-    "daisy": "nährstoffarm bis mittel",
     "dandelion": "nährstoffreich",
     "nettle": "stickstoffreich, feucht",
-    "clover": "stickstoffarm"
+    "clover": "stickstoffarm",
+    "daisy": "nährstoffarm bis mittel",
+    "rapeseed": "nährstoffreich"
 }
 
 soil_to_plants = {
-    "nährstoffarm bis mittel": ["Lavendel", "Rosmarin"],
     "nährstoffreich": ["Tomate", "Zucchini"],
     "stickstoffreich, feucht": ["Kohl", "Gurke"],
-    "stickstoffarm": ["Klee", "Erbsen"]
+    "stickstoffarm": ["Erbsen", "Klee"],
+    "nährstoffarm bis mittel": ["Lavendel", "Rosmarin"]
 }
 
 # ----------------------------
@@ -49,16 +52,16 @@ if uploaded_file:
     st.write("🔍 Analysiere Pflanze...")
 
     # ----------------------------
-    # 🤖 KI Prediction (Top 3)
+    # 🤖 KI Prediction
     # ----------------------------
     results = classifier(image)
 
-    st.subheader("🌿 Erkannte Möglichkeiten:")
+    st.subheader("🌿 Erkannte Pflanzen (Top 3):")
 
     top_plant = None
 
     for r in results[:3]:
-        label = r["label"]
+        label = r["label"].lower()
         score = round(r["score"] * 100, 2)
 
         st.write(f"👉 {label} ({score}%)")
@@ -67,11 +70,11 @@ if uploaded_file:
             top_plant = label
 
     # ----------------------------
-    # 🌱 Boden ableiten
+    # 🌱 Boden bestimmen
     # ----------------------------
     st.subheader("🌱 Bodenanalyse:")
 
-    soil = plant_to_soil.get(top_plant.lower(), "unbekannt / gemischt")
+    soil = plant_to_soil.get(top_plant, "unbekannt / gemischt")
 
     st.success(f"Wahrscheinlicher Boden: {soil}")
 
@@ -86,7 +89,7 @@ if uploaded_file:
         for plant in recommendations:
             st.write(f"🌿 {plant}")
     else:
-        st.write("Keine Daten vorhanden – erweitere deine Datenbank 🙂")
+        st.write("Keine Empfehlungen vorhanden – Datenbank erweitern!")
 
     # ----------------------------
     # 💡 Erklärung
@@ -94,6 +97,7 @@ if uploaded_file:
     st.subheader("💡 Erklärung")
 
     st.write(
-        "Die erkannte Pflanze bestimmt typische Bodenbedingungen. "
-        "Diese werden mit einer Datenbank abgeglichen, um passende Pflanzen vorzuschlagen."
+        "Die KI erkennt die wahrscheinlichste Pflanze im Bild. "
+        "Diese wird mit einer Boden-Datenbank verknüpft, "
+        "um passende Gartenpflanzen vorzuschlagen."
     )
