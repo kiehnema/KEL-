@@ -1,27 +1,27 @@
 import streamlit as st
 from PIL import Image
 import torch
-from transformers import AutoImageProcessor, AutoModelForImageClassification
+from transformers import AutoModelForImageClassification, AutoFeatureExtractor
 
 # ----------------------------
 # 🌿 App Setup
 # ----------------------------
 st.set_page_config(page_title="🌿 Pflanzen KI", page_icon="🌱")
-st.title("🌿 KI Pflanzen- & Bodenanalyse App")
+st.title("🌿 KI Pflanzen- & Bodenanalyse")
 
 # ----------------------------
-# 🤖 Modell laden (FIXED)
+# 🤖 Modell
 # ----------------------------
 @st.cache_resource
 def load_model():
     model_name = "maxefrost/plant_image_classifier_random"
 
-    processor = AutoImageProcessor.from_pretrained(model_name)
+    feature_extractor = AutoFeatureExtractor.from_pretrained(model_name)
     model = AutoModelForImageClassification.from_pretrained(model_name)
 
-    return processor, model
+    return feature_extractor, model
 
-processor, model = load_model()
+feature_extractor, model = load_model()
 
 # ----------------------------
 # 🌱 Logik
@@ -43,7 +43,7 @@ soil_to_plants = {
 # ----------------------------
 # 📷 Upload
 # ----------------------------
-uploaded_file = st.file_uploader("📷 Bild hochladen", type=["jpg", "png", "jpeg"])
+uploaded_file = st.file_uploader("Bild hochladen", type=["jpg", "png", "jpeg"])
 
 if uploaded_file:
 
@@ -53,15 +53,14 @@ if uploaded_file:
     st.write("🔍 Analysiere...")
 
     # ----------------------------
-    # 🤖 Prediction (MANUELL)
+    # 🤖 Prediction
     # ----------------------------
-    inputs = processor(images=image, return_tensors="pt")
+    inputs = feature_extractor(images=image, return_tensors="pt")
 
     with torch.no_grad():
         outputs = model(**inputs)
-        logits = outputs.logits
 
-    probs = torch.nn.functional.softmax(logits, dim=-1)
+    probs = torch.nn.functional.softmax(outputs.logits, dim=-1)
 
     topk = torch.topk(probs, 3)
 
