@@ -6,37 +6,37 @@ from transformers import pipeline
 # 🌿 App Setup
 # ----------------------------
 st.set_page_config(page_title="🌿 Pflanzen KI", page_icon="🌱")
-st.title("🌿 KI Pflanzen- & Bodenanalyse")
-st.write("Lade ein Bild einer Pflanze hoch und erhalte Boden + Empfehlungen.")
+st.title("🌿 KI Pflanzen- & Bodenanalyse App")
+st.write("Lade ein Bild einer Pflanze hoch.")
 
 # ----------------------------
-# 🤖 Modell laden (Pflanzen-spezialisiert)
+# 🤖 Modell laden (DEIN MODELL)
 # ----------------------------
 @st.cache_resource
 def load_model():
     return pipeline(
         "image-classification",
-        model="marwaALzaabi/plant-identification-vit"
+        model="maxefrost/plant_image_classifier_random"
     )
 
 classifier = load_model()
 
 # ----------------------------
-# 🌱 Wissensdatenbank (deine Logik)
+# 🌱 Pflanzen → Boden Logik
 # ----------------------------
 plant_to_soil = {
-    "dandelion": "nährstoffreich",
     "nettle": "stickstoffreich, feucht",
+    "dandelion": "nährstoffreich",
     "clover": "stickstoffarm",
     "daisy": "nährstoffarm bis mittel",
-    "rapeseed": "nährstoffreich"
+    "plant": "unbekannt / gemischt"
 }
 
 soil_to_plants = {
-    "nährstoffreich": ["Tomate", "Zucchini"],
     "stickstoffreich, feucht": ["Kohl", "Gurke"],
-    "stickstoffarm": ["Erbsen", "Klee"],
-    "nährstoffarm bis mittel": ["Lavendel", "Rosmarin"]
+    "nährstoffreich": ["Tomate", "Zucchini"],
+    "stickstoffarm": ["Erbsen", "Lavendel"],
+    "nährstoffarm bis mittel": ["Rosmarin", "Lavendel"]
 }
 
 # ----------------------------
@@ -70,7 +70,7 @@ if uploaded_file:
             top_plant = label
 
     # ----------------------------
-    # 🌱 Boden bestimmen
+    # 🌱 Bodenanalyse
     # ----------------------------
     st.subheader("🌱 Bodenanalyse:")
 
@@ -89,15 +89,14 @@ if uploaded_file:
         for plant in recommendations:
             st.write(f"🌿 {plant}")
     else:
-        st.write("Keine Empfehlungen vorhanden – Datenbank erweitern!")
+        st.write("Keine Daten vorhanden – erweitere deine Datenbank 🙂")
 
     # ----------------------------
     # 💡 Erklärung
     # ----------------------------
     st.subheader("💡 Erklärung")
-
     st.write(
-        "Die KI erkennt die wahrscheinlichste Pflanze im Bild. "
+        "Die KI erkennt die wahrscheinlichste Pflanze. "
         "Diese wird mit einer Boden-Datenbank verknüpft, "
         "um passende Gartenpflanzen vorzuschlagen."
     )
