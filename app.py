@@ -1,35 +1,36 @@
 import streamlit as st
 from PIL import Image
-from transformers import pipeline
+import torch
+from transformers import AutoImageProcessor, AutoModelForImageClassification
 
 # ----------------------------
 # 🌿 App Setup
 # ----------------------------
 st.set_page_config(page_title="🌿 Pflanzen KI", page_icon="🌱")
 st.title("🌿 KI Pflanzen- & Bodenanalyse App")
-st.write("Lade ein Bild einer Pflanze hoch.")
 
 # ----------------------------
-# 🤖 Modell laden (DEIN MODELL)
+# 🤖 Modell laden (FIXED)
 # ----------------------------
 @st.cache_resource
 def load_model():
-    return pipeline(
-        "image-classification",
-        model="maxefrost/plant_image_classifier_random"
-    )
+    model_name = "maxefrost/plant_image_classifier_random"
 
-classifier = load_model()
+    processor = AutoImageProcessor.from_pretrained(model_name)
+    model = AutoModelForImageClassification.from_pretrained(model_name)
+
+    return processor, model
+
+processor, model = load_model()
 
 # ----------------------------
-# 🌱 Pflanzen → Boden Logik
+# 🌱 Logik
 # ----------------------------
 plant_to_soil = {
     "nettle": "stickstoffreich, feucht",
     "dandelion": "nährstoffreich",
     "clover": "stickstoffarm",
-    "daisy": "nährstoffarm bis mittel",
-    "plant": "unbekannt / gemischt"
+    "daisy": "nährstoffarm bis mittel"
 }
 
 soil_to_plants = {
@@ -47,56 +48,44 @@ uploaded_file = st.file_uploader("📷 Bild hochladen", type=["jpg", "png", "jpe
 if uploaded_file:
 
     image = Image.open(uploaded_file)
-    st.image(image, caption="Dein Bild", use_column_width=True)
+    st.image(image, use_column_width=True)
 
-    st.write("🔍 Analysiere Pflanze...")
-
-    # ----------------------------
-    # 🤖 KI Prediction
-    # ----------------------------
-    results = classifier(image)
-
-    st.subheader("🌿 Erkannte Pflanzen (Top 3):")
-
-    top_plant = None
-
-    for r in results[:3]:
-        label = r["label"].lower()
-        score = round(r["score"] * 100, 2)
-
-        st.write(f"👉 {label} ({score}%)")
-
-        if top_plant is None:
-            top_plant = label
+    st.write("🔍 Analysiere...")
 
     # ----------------------------
-    # 🌱 Bodenanalyse
+    # 🤖 Prediction (MANUELL)
     # ----------------------------
-    st.subheader("🌱 Bodenanalyse:")
+    inputs = processor(images=image, return_tensors="pt")
 
+    with torch.no_grad():
+        outputs = model(**inputs)
+        logits = outputs.logits
+
+    probs = torch.nn.functional.softmax(logits, dim=-1)
+
+    topk = torch.topk(probs, 3)
+
+    labels = [model.config.id2label[i.item()] for i in topk.indices[0]]
+    scores = topk.values[0]
+
+    st.subheader("🌿 Ergebnisse:")
+
+    top_plant = labels[0].lower()
+
+    for label, score in zip(labels, scores):
+        st.write(f"👉 {label} ({round(score.item()*100,2)}%)")
+
+    # ----------------------------
+    # 🌱 Boden
+    # ----------------------------
     soil = plant_to_soil.get(top_plant, "unbekannt / gemischt")
 
-    st.success(f"Wahrscheinlicher Boden: {soil}")
+    st.success(f"Boden: {soil}")
 
     # ----------------------------
     # 🌿 Empfehlungen
     # ----------------------------
-    st.subheader("🌿 Empfohlene Pflanzen:")
+    st.subheader("🌿 Empfehlungen:")
 
-    recommendations = soil_to_plants.get(soil, [])
-
-    if recommendations:
-        for plant in recommendations:
-            st.write(f"🌿 {plant}")
-    else:
-        st.write("Keine Daten vorhanden – erweitere deine Datenbank 🙂")
-
-    # ----------------------------
-    # 💡 Erklärung
-    # ----------------------------
-    st.subheader("💡 Erklärung")
-    st.write(
-        "Die KI erkennt die wahrscheinlichste Pflanze. "
-        "Diese wird mit einer Boden-Datenbank verknüpft, "
-        "um passende Gartenpflanzen vorzuschlagen."
-    )
+    for p in soil_to_plants.get(soil, []):
+        st.write("🌿", p)
