@@ -2,69 +2,90 @@ import streamlit as st
 from PIL import Image
 import torch
 from transformers import AutoImageProcessor, AutoModelForImageClassification
+from supabase import create_client
 
-# ----------------------------
-# 🌿 Setup
-# ----------------------------
+# =============================
+# SUPABASE
+# =============================
+SUPABASE_URL = st.secrets["SUPABASE_URL"]
+SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# =============================
+# SEITE
+# =============================
 st.set_page_config(page_title="🌿 Wildpflanzen KI", page_icon="🌱")
-st.title("🌿 Wildpflanzen & Bodenanalyse (Offline KI)")
+st.title("🌿 Wildpflanzen & Bodenanalyse (AI + DB)")
 
 st.write("Lade ein Bild einer Pflanze hoch.")
 
-# ----------------------------
-# 🤖 Modell laden
-# ----------------------------
+# =============================
+# MODELL LADEN
+# =============================
 @st.cache_resource
 def load_model():
     model_name = "marwaALzaabi/plant-identification-vit"
-
     processor = AutoImageProcessor.from_pretrained(model_name)
     model = AutoModelForImageClassification.from_pretrained(model_name)
-
     return processor, model
 
 processor, model = load_model()
 
-# ----------------------------
-# 🌱 Pflanzen → Boden
-# ----------------------------
-plant_to_soil = {
-    "dandelion": "nährstoffreich",
-    "nettle": "stickstoffreich, feucht",
-    "clover": "stickstoffarm",
-    "daisy": "nährstoffarm bis mittel",
-    "plant": "unbekannt"
-}
+# =============================
+# NORMALISIERUNG (wichtig für DB)
+# =============================
+def normalize(label):
+    label = label.lower()
 
-soil_to_plants = {
-    "nährstoffreich": ["Tomate", "Zucchini"],
-    "stickstoffreich, feucht": ["Kohl", "Gurke"],
-    "stickstoffarm": ["Erbsen", "Lavendel"],
-    "nährstoffarm bis mittel": ["Rosmarin", "Lavendel"]
-}
+    if "dandelion" in label or "taraxacum" in label:
+        return "loewenzahn"
+    if "nettle" in label or "urtica" in label:
+        return "brennnessel"
+    if "clover" in label or "trifolium" in label:
+        return "klee"
+    if "daisy" in label:
+        return "gaensebluemchen"
+    if "lavender" in label:
+        return "lavendel"
+    if "mint" in label:
+        return "minze"
 
-# ----------------------------
-# 📷 Upload
-# ----------------------------
+    return "unbekannt"
+
+# =============================
+# SUPABASE ABFRAGE
+# =============================
+def get_plant_data(plant_key):
+    res = supabase.table("plants") \
+        .select("*") \
+        .eq("plant_key", plant_key) \
+        .execute()
+
+    if res.data:
+        return res.data[0]
+    return None
+
+# =============================
+# UPLOAD
+# =============================
 uploaded_file = st.file_uploader("Bild hochladen", type=["jpg", "png", "jpeg"])
 
 if uploaded_file:
 
-    image = Image.open(uploaded_file)
+    image = Image.open(uploaded_file).convert("RGB")
     st.image(image, use_column_width=True)
 
     st.write("🔍 Analysiere Pflanze...")
 
-    # ----------------------------
-    # 🤖 Prediction
-    # ----------------------------
+    # =============================
+    # PREDICTION
+    # =============================
     inputs = processor(images=image, return_tensors="pt")
 
     with torch.no_grad():
         outputs = model(**inputs)
 
     probs = torch.nn.functional.softmax(outputs.logits, dim=-1)
-
     topk = torch.topk(probs, 3)
 
     labels = [model.config.id2label[i.item()] for i in topk.indices[0]]
@@ -72,32 +93,45 @@ if uploaded_file:
 
     st.subheader("🌿 Ergebnisse:")
 
-    top_plant = labels[0].lower()
+    raw_label = labels[0]
+    confidence = float(scores[0])
 
     for label, score in zip(labels, scores):
         st.write(f"👉 {label} ({round(score.item()*100,2)}%)")
 
-    # ----------------------------
-    # 🌱 Boden
-    # ----------------------------
-    soil = plant_to_soil.get(top_plant, "unbekannt / gemischt")
+    st.success(f"🌿 Top-Erkennung: {raw_label} ({round(confidence*100,2)}%)")
 
-    st.subheader("🌱 Bodenanalyse")
-    st.success(soil)
+    # =============================
+    # NORMALISIERUNG
+    # =============================
+    plant_key = normalize(raw_label)
 
-    # ----------------------------
-    # 🌿 Empfehlungen
-    # ----------------------------
-    st.subheader("🌿 Empfehlungen")
+    st.subheader("🌱 Erkannte Pflanzenklasse")
+    st.info(plant_key)
 
-    for p in soil_to_plants.get(soil, []):
-        st.write("🌿", p)
+    # =============================
+    # SUPABASE ABFRAGE
+    # =============================
+    plant_data = None
 
-    # ----------------------------
-    # 💡 Erklärung
-    # ----------------------------
-    st.subheader("💡 Erklärung")
-    st.write(
-        "Das Modell erkennt die wahrscheinlichste Pflanze im Bild. "
-        "Diese wird mit einer eigenen Boden-Datenbank verknüpft."
-    )
+    if plant_key != "unbekannt":
+        plant_data = get_plant_data(plant_key)
+    else:
+        st.warning("⚠️ Pflanze nicht eindeutig erkannt → keine DB-Abfrage")
+
+    # =============================
+    # AUSGABE
+    # =============================
+    if plant_data:
+
+        st.subheader("🌱 Bodenanalyse (Supabase)")
+
+        st.write("Boden:", plant_data.get("soil"))
+        st.write("Feuchtigkeit:", plant_data.get("moisture"))
+        st.write("Sonne:", plant_data.get("sun"))
+
+        st.subheader("🌿 Empfehlungen")
+        st.success(plant_data.get("recommendations"))
+
+    else:
+        st.warning("❌ Keine Daten in Supabase für diese Pflanze gefunden")
