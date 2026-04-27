@@ -5,6 +5,35 @@ from transformers import AutoImageProcessor, AutoModelForImageClassification
 from supabase import create_client
 
 # =============================
+# 🌿 UI STYLES
+# =============================
+st.markdown("""
+<style>
+.status-box {
+    padding: 15px;
+    border-radius: 12px;
+    margin-top: 10px;
+    font-size: 16px;
+}
+
+.success {
+    background-color: #e6f4ea;
+    border-left: 6px solid #2e7d32;
+}
+
+.warning {
+    background-color: #fff8e1;
+    border-left: 6px solid #f9a825;
+}
+
+.error {
+    background-color: #fdecea;
+    border-left: 6px solid #c62828;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# =============================
 # SUPABASE
 # =============================
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
@@ -16,7 +45,6 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 # =============================
 st.set_page_config(page_title="🌿 Wildpflanzen KI", page_icon="🌱")
 st.title("🌿 Wildpflanzen & Bodenanalyse (AI + DB)")
-
 st.write("Lade ein Bild einer Pflanze hoch.")
 
 # =============================
@@ -32,7 +60,7 @@ def load_model():
 processor, model = load_model()
 
 # =============================
-# NORMALISIERUNG (wichtig für DB)
+# NORMALISIERUNG
 # =============================
 def normalize(label):
     label = label.lower()
@@ -53,7 +81,7 @@ def normalize(label):
     return "unbekannt"
 
 # =============================
-# SUPABASE ABFRAGE
+# SUPABASE
 # =============================
 def get_plant_data(plant_key):
     res = supabase.table("plants") \
@@ -91,10 +119,10 @@ if uploaded_file:
     labels = [model.config.id2label[i.item()] for i in topk.indices[0]]
     scores = topk.values[0]
 
-    st.subheader("🌿 Ergebnisse:")
-
     raw_label = labels[0]
     confidence = float(scores[0])
+
+    st.subheader("🌿 Ergebnisse:")
 
     for label, score in zip(labels, scores):
         st.write(f"👉 {label} ({round(score.item()*100,2)}%)")
@@ -116,22 +144,48 @@ if uploaded_file:
 
     if plant_key != "unbekannt":
         plant_data = get_plant_data(plant_key)
-    else:
-        st.warning("⚠️ Pflanze nicht eindeutig erkannt → keine DB-Abfrage")
 
     # =============================
-    # AUSGABE
+    # UI LOGIK (NEU)
     # =============================
-    if plant_data:
+
+    # ❌ FALL 1: unsicher / unbekannt
+    if plant_key == "unbekannt":
+
+        st.markdown(f"""
+        <div class="status-box warning">
+        ⚠️ <b>Unsichere Erkennung</b><br><br>
+        Das Modell konnte die Pflanze nicht eindeutig zuordnen.<br>
+        Bitte anderes Bild versuchen oder Pflanze manuell prüfen.
+        </div>
+        """, unsafe_allow_html=True)
+
+    # ⚫ FALL 2: erkannt aber keine DB
+    elif plant_data is None:
+
+        st.markdown(f"""
+        <div class="status-box error">
+        🌿 <b>Pflanze erkannt, aber keine Daten gefunden</b><br><br>
+        Erkannt: <b>{plant_key}</b><br>
+        Die Pflanze ist nicht in der Datenbank vorhanden.
+        </div>
+        """, unsafe_allow_html=True)
+
+    # 🟢 FALL 3: alles ok
+    else:
+
+        st.markdown(f"""
+        <div class="status-box success">
+        🌿 <b>Pflanze erfolgreich erkannt</b><br><br>
+        <b>{plant_key}</b><br>
+        Datenbankeintrag gefunden und geladen.
+        </div>
+        """, unsafe_allow_html=True)
 
         st.subheader("🌱 Bodenanalyse (Supabase)")
-
         st.write("Boden:", plant_data.get("soil"))
         st.write("Feuchtigkeit:", plant_data.get("moisture"))
         st.write("Sonne:", plant_data.get("sun"))
 
         st.subheader("🌿 Empfehlungen")
         st.success(plant_data.get("recommendations"))
-
-    else:
-        st.warning("❌ Keine Daten in Supabase für diese Pflanze gefunden")
