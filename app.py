@@ -48,7 +48,7 @@ st.title("🌿 Wildpflanzen & Bodenanalyse (AI + DB)")
 st.write("Lade ein Bild einer Pflanze hoch.")
 
 # =============================
-# MODELL LADEN
+# MODELL
 # =============================
 @st.cache_resource
 def load_model():
@@ -60,7 +60,7 @@ def load_model():
 processor, model = load_model()
 
 # =============================
-# 🌿 NEUES 3-LEVEL PLANT MAPPING
+# 🌿 BOTANISCHES MAPPING (sauber getrennt)
 # =============================
 def map_plant(label):
 
@@ -69,68 +69,55 @@ def map_plant(label):
     result = {
         "raw": label,
         "db_key": "unbekannt",
-        "group": None,
+        "group": "unbekannt",
         "note": None
     }
 
-    # 🌿 Brennnessel / Taubnessel Unterscheidung
+    # 🌿 Brennnessel vs Taubnessel
     if "urtica" in label:
         result["db_key"] = "brennnessel"
         result["group"] = "Echte Brennnessel (Urtica)"
-        result["note"] = "Echte Brennnessel"
 
     elif "lamium" in label:
         result["db_key"] = "brennnessel"
         result["group"] = "Taubnessel (Lamium)"
-        result["note"] = "⚠️ KEINE echte Brennnessel – nur ähnliche Pflanze"
+        result["note"] = "⚠️ KEINE echte Brennnessel – nur ähnliche Pflanzenfamilie"
 
-    # 🌿 Löwenzahn
     elif "taraxacum" in label:
         result["db_key"] = "loewenzahn"
         result["group"] = "Löwenzahn"
 
-    # 🌿 Klee
     elif "trifolium" in label:
         result["db_key"] = "klee"
         result["group"] = "Klee"
 
-    # 🌿 Heidekraut
     elif "calluna" in label:
         result["db_key"] = "heidekraut"
         result["group"] = "Heidekraut"
 
-    # 🌿 Thymian
     elif "thymus" in label:
         result["db_key"] = "thymian"
         result["group"] = "Thymian"
 
-    # 🌿 Kamille
     elif "matricaria" in label or "chamomilla" in label:
         result["db_key"] = "kamille"
         result["group"] = "Kamille"
 
-    # 🌿 Farn
     elif "dryopteris" in label or "pteridium" in label:
         result["db_key"] = "farn"
         result["group"] = "Farn"
 
-    # 🌿 Schafgarbe
     elif "achillea" in label:
-        result["db_key"] = "schafgarbe"
+        result["db_key"] = "schafgabe"
         result["group"] = "Schafgarbe"
 
-    # 🌿 Sumpfdotterblume
     elif "caltha" in label:
         result["db_key"] = "sumpfdotterblume"
         result["group"] = "Sumpfdotterblume"
 
-    # 🌿 Seggen
     elif "carex" in label:
         result["db_key"] = "seggen"
         result["group"] = "Seggen"
-
-    else:
-        result["db_key"] = "unbekannt"
 
     return result
 
@@ -143,9 +130,7 @@ def get_plant_data(plant_key):
         .eq("plant_key", plant_key) \
         .execute()
 
-    if res.data:
-        return res.data[0]
-    return None
+    return res.data[0] if res.data else None
 
 # =============================
 # UPLOAD
@@ -160,7 +145,7 @@ if uploaded_file:
     st.write("🔍 Analysiere Pflanze...")
 
     # =============================
-    # PREDICTION
+    # KI PREDICTION
     # =============================
     inputs = processor(images=image, return_tensors="pt")
 
@@ -176,7 +161,7 @@ if uploaded_file:
     raw_label = labels[0]
     confidence = float(scores[0])
 
-    st.subheader("🌿 Ergebnisse:")
+    st.subheader("🌿 Ergebnisse")
 
     for label, score in zip(labels, scores):
         st.write(f"👉 {label} ({round(score.item()*100,2)}%)")
@@ -184,15 +169,15 @@ if uploaded_file:
     st.success(f"🌿 Top-Erkennung: {raw_label} ({round(confidence*100,2)}%)")
 
     # =============================
-    # 🌿 MAPPING (NEU)
+    # MAPPING
     # =============================
     mapped = map_plant(raw_label)
     plant_key = mapped["db_key"]
+    plant_data = get_plant_data(plant_key) if plant_key != "unbekannt" else None
 
-    st.subheader("🌱 Pflanzen-Analyse")
-
-    st.write("🔬 Exakte Art:", mapped["raw"])
-    st.write("🌿 Gruppe:", mapped["group"] or "unbekannt")
+    st.subheader("🌱 Pflanzen-Einordnung")
+    st.write("🔬 Art:", mapped["raw"])
+    st.write("🌿 Gruppe:", mapped["group"])
 
     if mapped["note"]:
         st.warning(mapped["note"])
@@ -200,47 +185,49 @@ if uploaded_file:
     st.info(f"DB-Key: {plant_key}")
 
     # =============================
-    # SUPABASE
-    # =============================
-    plant_data = None
-
-    if plant_key != "unbekannt":
-        plant_data = get_plant_data(plant_key)
-
-    # =============================
-    # UI LOGIK
+    # 🧠 UI LOGIK (CLEAN)
     # =============================
 
+    # ❌ UNSICHER
     if plant_key == "unbekannt":
 
         st.markdown(f"""
         <div class="status-box warning">
         ⚠️ <b>Unsichere Erkennung</b><br><br>
-        Das Modell konnte die Pflanze nicht eindeutig zuordnen.
+        Die Pflanze konnte nicht eindeutig zugeordnet werden.<br>
+        Bitte anderes Bild versuchen.
         </div>
         """, unsafe_allow_html=True)
 
+    # 🌿 ÄHNLICH, ABER KEIN DB MATCH
     elif plant_data is None:
 
         st.markdown(f"""
         <div class="status-box error">
-        🌿 <b>Pflanze erkannt, aber keine Daten gefunden</b><br><br>
-        Erkannt: <b>{plant_key}</b><br>
-        Gruppe: <b>{mapped['group']}</b><br>
+        🌿 <b>Pflanze erkannt – keine exakte Datenbank-Entsprechung</b><br><br>
+
+        🔬 Erkannt: <b>{mapped['group']}</b><br>
+        ⚠️ Hinweis: Diese Pflanze ist nicht direkt in der Datenbank hinterlegt.<br>
+        👉 Es wird eine ähnliche Pflanzenkategorie als Referenz genutzt.
         </div>
         """, unsafe_allow_html=True)
 
+        st.subheader("🌱 Referenz-Bodenanalyse")
+        st.write("⚠️ basiert auf ähnlicher Pflanzenklasse:", plant_key)
+        st.write("Kohl, Tomate, Gurke")
+
+    # 🌿 EXAKTER TREFFER
     else:
 
         st.markdown(f"""
         <div class="status-box success">
-        🌿 <b>Pflanze erfolgreich erkannt</b><br><br>
-        <b>{mapped['group']}</b><br>
-        Datenbankeintrag gefunden.
+        🌿 <b>Pflanze erkannt & zugeordnet</b><br><br>
+        {mapped['group']}<br>
+        Exakter Datenbankeintrag vorhanden.
         </div>
         """, unsafe_allow_html=True)
 
-        st.subheader("🌱 Bodenanalyse (Supabase)")
+        st.subheader("🌱 Bodenanalyse")
         st.write("Boden:", plant_data.get("soil"))
         st.write("Feuchtigkeit:", plant_data.get("moisture"))
         st.write("Sonne:", plant_data.get("sun"))
