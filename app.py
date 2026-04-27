@@ -60,25 +60,79 @@ def load_model():
 processor, model = load_model()
 
 # =============================
-# NORMALISIERUNG
+# 🌿 NEUES 3-LEVEL PLANT MAPPING
 # =============================
-def normalize(label):
+def map_plant(label):
+
     label = label.lower()
 
-    if "dandelion" in label or "taraxacum" in label:
-        return "loewenzahn"
-    if "nettle" in label or "urtica" in label:
-        return "brennnessel"
-    if "clover" in label or "trifolium" in label:
-        return "klee"
-    if "daisy" in label:
-        return "gaensebluemchen"
-    if "lavender" in label:
-        return "lavendel"
-    if "mint" in label:
-        return "minze"
+    result = {
+        "raw": label,
+        "db_key": "unbekannt",
+        "group": None,
+        "note": None
+    }
 
-    return "unbekannt"
+    # 🌿 Brennnessel / Taubnessel Unterscheidung
+    if "urtica" in label:
+        result["db_key"] = "brennnessel"
+        result["group"] = "Echte Brennnessel (Urtica)"
+        result["note"] = "Echte Brennnessel"
+
+    elif "lamium" in label:
+        result["db_key"] = "brennnessel"
+        result["group"] = "Taubnessel (Lamium)"
+        result["note"] = "⚠️ KEINE echte Brennnessel – nur ähnliche Pflanze"
+
+    # 🌿 Löwenzahn
+    elif "taraxacum" in label:
+        result["db_key"] = "loewenzahn"
+        result["group"] = "Löwenzahn"
+
+    # 🌿 Klee
+    elif "trifolium" in label:
+        result["db_key"] = "klee"
+        result["group"] = "Klee"
+
+    # 🌿 Heidekraut
+    elif "calluna" in label:
+        result["db_key"] = "heidekraut"
+        result["group"] = "Heidekraut"
+
+    # 🌿 Thymian
+    elif "thymus" in label:
+        result["db_key"] = "thymian"
+        result["group"] = "Thymian"
+
+    # 🌿 Kamille
+    elif "matricaria" in label or "chamomilla" in label:
+        result["db_key"] = "kamille"
+        result["group"] = "Kamille"
+
+    # 🌿 Farn
+    elif "dryopteris" in label or "pteridium" in label:
+        result["db_key"] = "farn"
+        result["group"] = "Farn"
+
+    # 🌿 Schafgarbe
+    elif "achillea" in label:
+        result["db_key"] = "schafgarbe"
+        result["group"] = "Schafgarbe"
+
+    # 🌿 Sumpfdotterblume
+    elif "caltha" in label:
+        result["db_key"] = "sumpfdotterblume"
+        result["group"] = "Sumpfdotterblume"
+
+    # 🌿 Seggen
+    elif "carex" in label:
+        result["db_key"] = "seggen"
+        result["group"] = "Seggen"
+
+    else:
+        result["db_key"] = "unbekannt"
+
+    return result
 
 # =============================
 # SUPABASE
@@ -130,15 +184,23 @@ if uploaded_file:
     st.success(f"🌿 Top-Erkennung: {raw_label} ({round(confidence*100,2)}%)")
 
     # =============================
-    # NORMALISIERUNG
+    # 🌿 MAPPING (NEU)
     # =============================
-    plant_key = normalize(raw_label)
+    mapped = map_plant(raw_label)
+    plant_key = mapped["db_key"]
 
-    st.subheader("🌱 Erkannte Pflanzenklasse")
-    st.info(plant_key)
+    st.subheader("🌱 Pflanzen-Analyse")
+
+    st.write("🔬 Exakte Art:", mapped["raw"])
+    st.write("🌿 Gruppe:", mapped["group"] or "unbekannt")
+
+    if mapped["note"]:
+        st.warning(mapped["note"])
+
+    st.info(f"DB-Key: {plant_key}")
 
     # =============================
-    # SUPABASE ABFRAGE
+    # SUPABASE
     # =============================
     plant_data = None
 
@@ -146,39 +208,35 @@ if uploaded_file:
         plant_data = get_plant_data(plant_key)
 
     # =============================
-    # UI LOGIK (NEU)
+    # UI LOGIK
     # =============================
 
-    # ❌ FALL 1: unsicher / unbekannt
     if plant_key == "unbekannt":
 
         st.markdown(f"""
         <div class="status-box warning">
         ⚠️ <b>Unsichere Erkennung</b><br><br>
-        Das Modell konnte die Pflanze nicht eindeutig zuordnen.<br>
-        Bitte anderes Bild versuchen oder Pflanze manuell prüfen.
+        Das Modell konnte die Pflanze nicht eindeutig zuordnen.
         </div>
         """, unsafe_allow_html=True)
 
-    # ⚫ FALL 2: erkannt aber keine DB
     elif plant_data is None:
 
         st.markdown(f"""
         <div class="status-box error">
         🌿 <b>Pflanze erkannt, aber keine Daten gefunden</b><br><br>
         Erkannt: <b>{plant_key}</b><br>
-        Die Pflanze ist nicht in der Datenbank vorhanden.
+        Gruppe: <b>{mapped['group']}</b><br>
         </div>
         """, unsafe_allow_html=True)
 
-    # 🟢 FALL 3: alles ok
     else:
 
         st.markdown(f"""
         <div class="status-box success">
         🌿 <b>Pflanze erfolgreich erkannt</b><br><br>
-        <b>{plant_key}</b><br>
-        Datenbankeintrag gefunden und geladen.
+        <b>{mapped['group']}</b><br>
+        Datenbankeintrag gefunden.
         </div>
         """, unsafe_allow_html=True)
 
