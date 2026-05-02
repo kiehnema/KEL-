@@ -37,7 +37,7 @@ st.markdown("""
 
 /* --- Neue Styles --- */
 .stApp {
-    background-color: #f5f7fa;  /* Hellgrau für bessere Lesbarkeit */
+    background-color: #f5f7fa;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 .stButton>button {
@@ -76,7 +76,7 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 st.set_page_config(
     page_title="🌿 Wildpflanzen KI",
     page_icon="🌱",
-    layout="wide"  # **🆕 Mehr Platz für Inhalte**
+    layout="wide"
 )
 st.title("🌿 Wildpflanzen & Bodenanalyse")
 st.markdown("""
@@ -86,16 +86,21 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =============================
-# MODELL (OPTIMIERT)
+# MODELL (ANGEPASST FÜR janjibDEV/vit-plantnet300k)
 # =============================
 @st.cache_resource
 def load_model():
-    # **🆕 Besseres Modell: PlantNet300K (höhere Genauigkeit für Wildpflanzen)**
-    model_name = "plantnet/plantnet-300k"
-    processor = AutoImageProcessor.from_pretrained(model_name)
-    model = AutoModelForImageClassification.from_pretrained(model_name)
-    return processor, model
+    try:
+        # Lade Processor und Modell aus dem lokalen Ordner
+        processor = AutoImageProcessor.from_pretrained("./model/processor")
+        model = AutoModelForImageClassification.from_pretrained("./model/model")
+        return processor, model
+    except Exception as e:
+        st.error(f"❌ Fehler beim Laden des Modells: {e}")
+        st.error("Stelle sicher, dass der Ordner 'model/' mit den Dateien 'config.json', 'model.safetensors' und 'preprocessor_config.json' existiert.")
+        raise
 
+# Lade das Modell (wird nur einmal geladen dank @st.cache_resource)
 processor, model = load_model()
 
 # =============================
@@ -108,10 +113,9 @@ def map_plant(label):
         "db_key": "unbekannt",
         "group": "unbekannt",
         "note": None,
-        "scientific_name": None  # **🆕 Wissenschaftlicher Name für die DB**
+        "scientific_name": None
     }
 
-    # **🆕 Erweiterte Mapping-Logik mit wissenschaftlichen Namen**
     plant_mapping = {
         "urtica": {"db_key": "brennnessel", "group": "Echte Brennnessel (Urtica)", "scientific_name": "Urtica dioica"},
         "lamium": {"db_key": "taubnessel", "group": "Taubnessel (Lamium)", "scientific_name": "Lamium album", "note": "⚠️ KEINE echte Brennnessel – nur ähnliche Blätter"},
@@ -151,7 +155,7 @@ def get_plant_data(plant_key):
         st.error(f"❌ Fehler bei der Datenbankabfrage: {e}")
         return None
 
-# **🆕 Fallback-Daten für unbekannte Pflanzen (basierend auf Gruppen)**
+# Fallback-Daten für unbekannte Pflanzen
 def get_fallback_data(plant_group):
     fallback_db = {
         "Echte Brennnessel (Urtica)": {
@@ -209,7 +213,6 @@ uploaded_file = st.file_uploader(
 )
 
 if uploaded_file:
-    # **🆕 Fortschrittsbalken für bessere UX**
     progress_bar = st.progress(0)
     status_text = st.empty()
 
@@ -221,9 +224,7 @@ if uploaded_file:
         progress_bar.progress(20)
         status_text.text("🔍 Bild wird analysiert...")
 
-        # =============================
-        # KI PREDICTION (OPTIMIERT)
-        # =============================
+        # KI PREDICTION
         inputs = processor(images=image, return_tensors="pt")
         progress_bar.progress(40)
 
@@ -232,7 +233,7 @@ if uploaded_file:
         progress_bar.progress(60)
 
         probs = torch.nn.functional.softmax(outputs.logits, dim=-1)
-        topk = torch.topk(probs, 5)  # **🆕 Top 5 statt Top 3 für mehr Optionen**
+        topk = torch.topk(probs, 5)
 
         labels = [model.config.id2label[i.item()] for i in topk.indices[0]]
         scores = topk.values[0]
@@ -243,12 +244,8 @@ if uploaded_file:
         progress_bar.progress(80)
         status_text.text("🌿 Pflanze wird identifiziert...")
 
-        # =============================
         # ERGEBNISSE ANZEIGEN
-        # =============================
         st.subheader("🔍 KI-Erkennungsergebnisse")
-
-        # **🆕 Ergebnisse als Tabelle für bessere Übersicht**
         results_df = pd.DataFrame({
             "Pflanze": labels,
             "Wahrscheinlichkeit": [f"{round(score.item()*100, 2)}%" for score in scores]
@@ -257,9 +254,7 @@ if uploaded_file:
 
         st.success(f"🌿 **Top-Erkennung**: {raw_label} ({round(confidence*100, 2)}%)")
 
-        # =============================
         # MAPPING & DATENBANK
-        # =============================
         mapped = map_plant(raw_label)
         plant_key = mapped["db_key"]
         plant_data = get_plant_data(plant_key) if plant_key != "unbekannt" else None
@@ -275,9 +270,7 @@ if uploaded_file:
 
         progress_bar.progress(90)
 
-        # =============================
-        # 🧠 UI LOGIK (ERWEITERT)
-        # =============================
+        # UI LOGIK
         if plant_key == "unbekannt":
             st.markdown(f"""
             <div class="status-box error">
@@ -293,7 +286,6 @@ if uploaded_file:
             """, unsafe_allow_html=True)
 
         elif plant_data is None:
-            # **🆕 Fallback-Daten aus der Gruppe nutzen**
             fallback_data = get_fallback_data(mapped["group"])
             if fallback_data:
                 st.markdown(f"""
@@ -323,14 +315,13 @@ if uploaded_file:
             </div>
             """, unsafe_allow_html=True)
 
-            # **🆕 Bodenanalyse als Radar-Diagramm (visuell ansprechend)**
             st.subheader("🌱 Bodenanalyse")
             soil_data = {
                 "Eigenschaft": ["Nährstoffe", "Feuchtigkeit", "pH-Wert", "Durchlässigkeit"],
                 "Wert": [
                     5 if "nährstoffreich" in plant_data.get("soil", "").lower() else 3,
                     5 if plant_data.get("moisture") == "hoch" else 3 if plant_data.get("moisture") == "mittel" else 1,
-                    7,  # **🆕 Platzhalter für pH-Wert (könnte aus DB kommen)**
+                    7,
                     4 if "durchlässig" in plant_data.get("soil", "").lower() else 2
                 ]
             }
@@ -338,7 +329,6 @@ if uploaded_file:
             fig = px.radar(df_soil, x="Eigenschaft", y="Wert", range_y=[0, 5], title="Bodenprofil")
             st.plotly_chart(fig, use_container_width=True)
 
-            # **🆕 Boden- und Pflanzendaten in Spalten anzeigen**
             col1, col2 = st.columns(2)
             with col1:
                 st.markdown("### 🌍 Boden")
