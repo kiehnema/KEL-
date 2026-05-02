@@ -7,3 +7,5 @@ numpy
 supabase
 plotly>=5.0.0
 pandas>=1.0.0  
+torch>=2.0.0
+safetensors>=0.3.0  
